@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23111'/><path d='M18 6L10 18h7l-3 8 12-14h-7l3-8z' fill='%23fafafa'/></svg>">
+  <title>Transload</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'IBM Plex Mono', monospace;
+      background: #fafafa;
+      color: #111;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 520px;
+    }
+
+    .header {
+      margin-bottom: 32px;
+    }
+
+    h1 {
+      font-size: 20px;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+    }
+
+    .subtitle {
+      margin-top: 4px;
+      font-size: 12px;
+      color: #999;
+    }
+
+    label {
+      display: block;
+      font-size: 11px;
+      color: #999;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    input[type="url"] {
+      flex: 1;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 13px;
+      color: #111;
+      background: #fff;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    input[type="url"]:focus { border-color: #111; }
+    input[type="url"]::placeholder { color: #bbb; }
+
+    button.primary {
+      padding: 10px 16px;
+      background: #111;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: opacity 0.15s;
+    }
+
+    button.primary:hover { opacity: 0.75; }
+    button.primary:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    .error-box {
+      margin-top: 12px;
+      font-size: 12px;
+      color: #c00;
+      display: none;
+    }
+
+    .error-box.show { display: block; }
+
+    .result {
+      margin-top: 28px;
+      display: none;
+    }
+
+    .result.show { display: block; }
+
+    .result-url {
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #333;
+      word-break: break-all;
+      line-height: 1.6;
+      background: #fff;
+    }
+
+    .action-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 10px;
+    }
+
+    button.link {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 12px;
+      color: #555;
+      cursor: pointer;
+      padding: 7px 12px;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    button.link:hover { border-color: #aaa; color: #111; }
+    button.link.ok { border-color: #090; color: #090; }
+
+    .sep {
+      border: none;
+      border-top: 1px solid #eee;
+      margin: 20px 0;
+    }
+
+    .commands {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .cmd-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      padding: 2px 0;
+    }
+
+    .cmd-tool {
+      font-size: 11px;
+      color: #bbb;
+      min-width: 40px;
+    }
+
+    .cmd-text {
+      font-size: 12px;
+      color: #555;
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .cmd-row:hover .cmd-text { color: #111; }
+
+    .cmd-check {
+      font-size: 11px;
+      color: #090;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
+    .cmd-check.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Transload</h1>
+      <p class="subtitle">Stream any file through Cloudflare's edge servers</p>
+    </div>
+
+    <div>
+      <label for="url">URL</label>
+      <div class="input-row">
+        <input
+          type="url"
+          id="url"
+          placeholder="https://example.com/file.zip"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button class="primary" id="submitBtn" onclick="handleSubmit()">Generate</button>
+      </div>
+    </div>
+
+    <div class="error-box" id="error"></div>
+
+    <div class="result" id="result">
+      <div class="result-url" id="transloadUrl"></div>
+      <div class="action-row">
+        <button class="link" id="copyBtn" onclick="copyUrl()">copy link</button>
+        <button class="link" onclick="openUrl()">open ↗</button>
+      </div>
+      <hr class="sep">
+      <div class="commands" id="commands"></div>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById('url').addEventListener('keydown', e => {
+      if (e.key === 'Enter') handleSubmit();
+    });
+
+    async function handleSubmit() {
+      const url = document.getElementById('url').value.trim();
+      if (!url) return;
+
+      const submitBtn = document.getElementById('submitBtn');
+      const errorBox = document.getElementById('error');
+      const result = document.getElementById('result');
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = '...';
+      errorBox.classList.remove('show');
+      result.classList.remove('show');
+
+      try {
+        const response = await fetch('/api/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Failed to create link');
+
+        const fullUrl = window.location.origin + data.download_url;
+        document.getElementById('transloadUrl').textContent = fullUrl;
+
+        const commandsEl = document.getElementById('commands');
+        commandsEl.innerHTML = '';
+
+        [
+          { tool: 'wget',   cmd: `wget "${fullUrl}"` },
+          { tool: 'curl',   cmd: `curl -LO "${fullUrl}"` },
+          { tool: 'aria2c', cmd: `aria2c "${fullUrl}"` },
+        ].forEach(({ tool, cmd }) => {
+          const row = document.createElement('div');
+          row.className = 'cmd-row';
+          row.innerHTML = `
+            <span class="cmd-tool">${tool}</span>
+            <span class="cmd-text">${cmd}</span>
+            <span class="cmd-check" id="check-${tool}">copied</span>
+          `;
+          row.addEventListener('click', () => {
+            navigator.clipboard.writeText(cmd).then(() => {
+              const check = document.getElementById(`check-${tool}`);
+              check.classList.add('show');
+              setTimeout(() => check.classList.remove('show'), 1800);
+            });
+          });
+          commandsEl.appendChild(row);
+        });
+
+        result.classList.add('show');
+      } catch (err) {
+        errorBox.textContent = err.message;
+        errorBox.classList.add('show');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Generate';
+      }
+    }
+
+    function copyUrl() {
+      const url = document.getElementById('transloadUrl').textContent;
+      const btn = document.getElementById('copyBtn');
+      navigator.clipboard.writeText(url).then(() => {
+        btn.textContent = 'copied';
+        btn.classList.add('ok');
+        setTimeout(() => {
+          btn.textContent = 'copy link';
+          btn.classList.remove('ok');
+        }, 1800);
+      });
+    }
+
+    function openUrl() {
+      const url = document.getElementById('transloadUrl').textContent;
+      if (url) window.open(url, '_blank');
+    }
+  </script>
+</body>
+</html>
