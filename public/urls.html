@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23111'/><path d='M18 6L10 18h7l-3 8 12-14h-7l3-8z' fill='%23fafafa'/></svg>">
+  <title>Transload — All Links</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            mono: ['IBM Plex Mono', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-zinc-950 text-zinc-100 font-mono min-h-screen p-6">
+  <div class="max-w-3xl mx-auto">
+
+    <!-- Header -->
+    <div class="mb-8 flex items-center justify-between">
+      <div>
+        <a href="/" class="text-xs text-zinc-600 hover:text-zinc-400 transition-colors">← back</a>
+        <h1 class="text-xl font-medium tracking-tight mt-2">All Links</h1>
+        <p class="mt-1 text-xs text-zinc-600">Every transload URL created</p>
+      </div>
+      <a
+        href="/"
+        class="px-3 py-2 bg-zinc-100 text-zinc-900 rounded text-xs font-medium hover:bg-white transition-colors"
+      >
+        + New
+      </a>
+    </div>
+
+    <!-- Loading -->
+    <div id="loading" class="text-xs text-zinc-600">Loading...</div>
+
+    <!-- Error -->
+    <div id="error" class="text-xs text-red-400 hidden"></div>
+
+    <!-- Empty -->
+    <div id="empty" class="hidden">
+      <p class="text-xs text-zinc-600">No links created yet. <a href="/" class="text-zinc-400 underline underline-offset-2">Create one →</a></p>
+    </div>
+
+    <!-- Table -->
+    <div id="tableWrap" class="hidden">
+      <div class="text-xs text-zinc-600 mb-3" id="countLabel"></div>
+      <div class="border border-zinc-800 rounded overflow-hidden">
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="border-b border-zinc-800 bg-zinc-900">
+              <th class="text-left px-4 py-3 text-zinc-500 font-medium uppercase tracking-widest text-[10px]">Filename</th>
+              <th class="text-left px-4 py-3 text-zinc-500 font-medium uppercase tracking-widest text-[10px]">Original URL</th>
+              <th class="text-left px-4 py-3 text-zinc-500 font-medium uppercase tracking-widest text-[10px] hidden sm:table-cell">Size</th>
+              <th class="text-left px-4 py-3 text-zinc-500 font-medium uppercase tracking-widest text-[10px] hidden sm:table-cell">Created</th>
+              <th class="px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody id="tableBody" class="divide-y divide-zinc-900"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    function formatBytes(bytes) {
+      if (!bytes || bytes === '') return '—';
+      const b = parseInt(bytes);
+      if (isNaN(b)) return '—';
+      if (b < 1024) return b + ' B';
+      if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+      if (b < 1024 * 1024 * 1024) return (b / (1024 * 1024)).toFixed(1) + ' MB';
+      return (b / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+    }
+
+    function formatDate(ts) {
+      if (!ts) return '—';
+      const d = new Date(ts * 1000);
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    function truncate(str, max) {
+      if (!str) return '—';
+      return str.length > max ? str.slice(0, max) + '…' : str;
+    }
+
+    async function load() {
+      const loading = document.getElementById('loading');
+      const error = document.getElementById('error');
+      const empty = document.getElementById('empty');
+      const tableWrap = document.getElementById('tableWrap');
+
+      try {
+        const res = await fetch('/api/urls');
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.error || 'Failed to load');
+
+        loading.classList.add('hidden');
+
+        if (!data.urls || data.urls.length === 0) {
+          empty.classList.remove('hidden');
+          return;
+        }
+
+        document.getElementById('countLabel').textContent = `${data.total} link${data.total !== 1 ? 's' : ''}`;
+
+        const tbody = document.getElementById('tableBody');
+        data.urls.forEach(row => {
+          const filename = row.filename || 'download.bin';
+          const downloadUrl = `${window.location.origin}/download/${row.id}/${encodeURIComponent(filename)}`;
+
+          const tr = document.createElement('tr');
+          tr.className = 'hover:bg-zinc-900/60 transition-colors group';
+          tr.innerHTML = `
+            <td class="px-4 py-3 text-zinc-300 max-w-[160px]">
+              <span title="${filename}" class="truncate block">${truncate(filename, 28)}</span>
+            </td>
+            <td class="px-4 py-3 text-zinc-600 max-w-[200px]">
+              <a
+                href="${row.original_url}"
+                target="_blank"
+                title="${row.original_url}"
+                class="truncate block hover:text-zinc-400 transition-colors"
+              >
+                ${truncate(row.original_url, 40)}
+              </a>
+            </td>
+            <td class="px-4 py-3 text-zinc-600 hidden sm:table-cell whitespace-nowrap">${formatBytes(row.content_length)}</td>
+            <td class="px-4 py-3 text-zinc-600 hidden sm:table-cell whitespace-nowrap">${formatDate(row.created_at)}</td>
+            <td class="px-4 py-3 text-right">
+              <div class="flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onclick="copyLink('${downloadUrl}', this)"
+                  class="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors px-2 py-1 border border-zinc-800 rounded hover:border-zinc-600"
+                >
+                  copy
+                </button>
+                <a
+                  href="${downloadUrl}"
+                  class="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors px-2 py-1 border border-zinc-800 rounded hover:border-zinc-600"
+                >
+                  ↓
+                </a>
+                <button
+                  onclick="deleteLink('${row.id}', this)"
+                  class="text-[10px] text-zinc-600 hover:text-red-400 transition-colors px-2 py-1 border border-zinc-800 rounded hover:border-red-900"
+                >
+                  ✕
+                </button>
+              </div>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        tableWrap.classList.remove('hidden');
+      } catch (err) {
+        loading.classList.add('hidden');
+        error.textContent = err.message;
+        error.classList.remove('hidden');
+      }
+    }
+
+    async function deleteLink(id, btn) {
+      const tr = btn.closest('tr');
+      if (!confirm('Delete this link?')) return;
+
+      btn.textContent = '...';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch(`/api/urls/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Failed to delete');
+
+        tr.style.transition = 'opacity 0.2s';
+        tr.style.opacity = '0';
+        setTimeout(() => {
+          tr.remove();
+          // Update count
+          const remaining = document.querySelectorAll('#tableBody tr').length;
+          document.getElementById('countLabel').textContent = `${remaining} link${remaining !== 1 ? 's' : ''}`;
+          if (remaining === 0) {
+            document.getElementById('tableWrap').classList.add('hidden');
+            document.getElementById('empty').classList.remove('hidden');
+          }
+        }, 200);
+      } catch (err) {
+        btn.textContent = '✕';
+        btn.disabled = false;
+      }
+    }
+
+    function copyLink(url, btn) {
+      navigator.clipboard.writeText(url).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = 'copied';
+        btn.classList.add('text-emerald-500');
+        setTimeout(() => {
+          btn.textContent = orig;
+          btn.classList.remove('text-emerald-500');
+        }, 1500);
+      });
+    }
+
+    load();
+  </script>
+</body>
+</html>

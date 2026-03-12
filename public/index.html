@@ -1,220 +1,89 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23111'/><path d='M18 6L10 18h7l-3 8 12-14h-7l3-8z' fill='%23fafafa'/></svg>">
   <title>Transload</title>
+  <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-
-    body {
-      font-family: 'IBM Plex Mono', monospace;
-      background: #fafafa;
-      color: #111;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            mono: ['IBM Plex Mono', 'monospace'],
+          }
+        }
+      }
     }
-
-    .container {
-      width: 100%;
-      max-width: 520px;
-    }
-
-    .header {
-      margin-bottom: 32px;
-    }
-
-    h1 {
-      font-size: 20px;
-      font-weight: 500;
-      letter-spacing: -0.01em;
-    }
-
-    .subtitle {
-      margin-top: 4px;
-      font-size: 12px;
-      color: #999;
-    }
-
-    label {
-      display: block;
-      font-size: 11px;
-      color: #999;
-      margin-bottom: 8px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-
-    .input-row {
-      display: flex;
-      gap: 8px;
-    }
-
-    input[type="url"] {
-      flex: 1;
-      padding: 10px 12px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      font-family: inherit;
-      font-size: 13px;
-      color: #111;
-      background: #fff;
-      outline: none;
-      transition: border-color 0.15s;
-    }
-
-    input[type="url"]:focus { border-color: #111; }
-    input[type="url"]::placeholder { color: #bbb; }
-
-    button.primary {
-      padding: 10px 16px;
-      background: #111;
-      color: #fff;
-      border: none;
-      border-radius: 4px;
-      font-family: inherit;
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-      white-space: nowrap;
-      transition: opacity 0.15s;
-    }
-
-    button.primary:hover { opacity: 0.75; }
-    button.primary:disabled { opacity: 0.35; cursor: not-allowed; }
-
-    .error-box {
-      margin-top: 12px;
-      font-size: 12px;
-      color: #c00;
-      display: none;
-    }
-
-    .error-box.show { display: block; }
-
-    .result {
-      margin-top: 28px;
-      display: none;
-    }
-
-    .result.show { display: block; }
-
-    .result-url {
-      padding: 10px 12px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      font-size: 12px;
-      color: #333;
-      word-break: break-all;
-      line-height: 1.6;
-      background: #fff;
-    }
-
-    .action-row {
-      display: flex;
-      gap: 12px;
-      margin-top: 10px;
-    }
-
-    button.link {
-      background: #fff;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      font-family: inherit;
-      font-size: 12px;
-      color: #555;
-      cursor: pointer;
-      padding: 7px 12px;
-      transition: border-color 0.15s, color 0.15s;
-    }
-
-    button.link:hover { border-color: #aaa; color: #111; }
-    button.link.ok { border-color: #090; color: #090; }
-
-    .sep {
-      border: none;
-      border-top: 1px solid #eee;
-      margin: 20px 0;
-    }
-
-    .commands {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .cmd-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      cursor: pointer;
-      padding: 2px 0;
-    }
-
-    .cmd-tool {
-      font-size: 11px;
-      color: #bbb;
-      min-width: 40px;
-    }
-
-    .cmd-text {
-      font-size: 12px;
-      color: #555;
-      flex: 1;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .cmd-row:hover .cmd-text { color: #111; }
-
-    .cmd-check {
-      font-size: 11px;
-      color: #090;
-      opacity: 0;
-      transition: opacity 0.15s;
-    }
-
-    .cmd-check.show { opacity: 1; }
-  </style>
+  </script>
 </head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>Transload</h1>
-      <p class="subtitle">Stream any file through Cloudflare's edge servers</p>
+<body class="bg-zinc-950 text-zinc-100 font-mono min-h-screen flex items-center justify-center p-5">
+  <div class="w-full max-w-lg">
+
+    <!-- Header -->
+    <div class="mb-8">
+      <div class="flex items-center justify-between">
+        <h1 class="text-xl font-medium tracking-tight">Transload</h1>
+        <a href="/urls" class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors underline underline-offset-2">
+          view all links →
+        </a>
+      </div>
+      <p class="mt-1 text-xs text-zinc-600">Stream any file through Cloudflare's edge servers</p>
     </div>
 
+    <!-- Input -->
     <div>
-      <label for="url">URL</label>
-      <div class="input-row">
+      <label for="url" class="block text-xs text-zinc-500 mb-2 uppercase tracking-widest">URL</label>
+      <div class="flex gap-2">
         <input
           type="url"
           id="url"
           placeholder="https://example.com/file.zip"
           autocomplete="off"
           spellcheck="false"
+          class="flex-1 px-3 py-2.5 bg-zinc-900 border border-zinc-800 rounded text-sm text-zinc-100 placeholder-zinc-700 outline-none focus:border-zinc-600 transition-colors"
         />
-        <button class="primary" id="submitBtn" onclick="handleSubmit()">Generate</button>
+        <button
+          id="submitBtn"
+          onclick="handleSubmit()"
+          class="px-4 py-2.5 bg-zinc-100 text-zinc-900 rounded text-xs font-medium cursor-pointer hover:bg-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed whitespace-nowrap"
+        >
+          Generate
+        </button>
       </div>
     </div>
 
-    <div class="error-box" id="error"></div>
+    <!-- Error -->
+    <div id="error" class="mt-3 text-xs text-red-400 hidden"></div>
 
-    <div class="result" id="result">
-      <div class="result-url" id="transloadUrl"></div>
-      <div class="action-row">
-        <button class="link" id="copyBtn" onclick="copyUrl()">copy link</button>
-        <button class="link" onclick="openUrl()">open ↗</button>
+    <!-- Result -->
+    <div id="result" class="mt-7 hidden">
+      <div id="transloadUrl" class="px-3 py-2.5 bg-zinc-900 border border-zinc-800 rounded text-xs text-zinc-400 break-all leading-relaxed"></div>
+
+      <div class="flex gap-3 mt-2.5">
+        <button
+          id="copyBtn"
+          onclick="copyUrl()"
+          class="px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded text-xs text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 transition-colors"
+        >
+          copy link
+        </button>
+        <button
+          onclick="openUrl()"
+          class="px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded text-xs text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 transition-colors"
+        >
+          open ↗
+        </button>
       </div>
-      <hr class="sep">
-      <div class="commands" id="commands"></div>
+
+      <hr class="border-zinc-800 my-5" />
+
+      <div id="commands" class="flex flex-col gap-2"></div>
     </div>
+
   </div>
 
   <script>
@@ -232,8 +101,8 @@
 
       submitBtn.disabled = true;
       submitBtn.textContent = '...';
-      errorBox.classList.remove('show');
-      result.classList.remove('show');
+      errorBox.classList.add('hidden');
+      result.classList.add('hidden');
 
       try {
         const response = await fetch('/api/create', {
@@ -257,26 +126,30 @@
           { tool: 'aria2c', cmd: `aria2c "${fullUrl}"` },
         ].forEach(({ tool, cmd }) => {
           const row = document.createElement('div');
-          row.className = 'cmd-row';
+          row.className = 'flex items-center gap-3 cursor-pointer py-1 group';
           row.innerHTML = `
-            <span class="cmd-tool">${tool}</span>
-            <span class="cmd-text">${cmd}</span>
-            <span class="cmd-check" id="check-${tool}">copied</span>
+            <span class="text-xs text-zinc-600 min-w-[44px]">${tool}</span>
+            <span class="text-xs text-zinc-500 flex-1 truncate group-hover:text-zinc-300 transition-colors">${cmd}</span>
+            <span id="check-${tool}" class="text-xs text-emerald-500 opacity-0 transition-opacity">copied</span>
           `;
           row.addEventListener('click', () => {
             navigator.clipboard.writeText(cmd).then(() => {
               const check = document.getElementById(`check-${tool}`);
-              check.classList.add('show');
-              setTimeout(() => check.classList.remove('show'), 1800);
+              check.classList.remove('opacity-0');
+              check.classList.add('opacity-100');
+              setTimeout(() => {
+                check.classList.remove('opacity-100');
+                check.classList.add('opacity-0');
+              }, 1800);
             });
           });
           commandsEl.appendChild(row);
         });
 
-        result.classList.add('show');
+        result.classList.remove('hidden');
       } catch (err) {
         errorBox.textContent = err.message;
-        errorBox.classList.add('show');
+        errorBox.classList.remove('hidden');
       } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = 'Generate';
@@ -288,10 +161,10 @@
       const btn = document.getElementById('copyBtn');
       navigator.clipboard.writeText(url).then(() => {
         btn.textContent = 'copied';
-        btn.classList.add('ok');
+        btn.classList.add('text-emerald-500', 'border-emerald-800');
         setTimeout(() => {
           btn.textContent = 'copy link';
-          btn.classList.remove('ok');
+          btn.classList.remove('text-emerald-500', 'border-emerald-800');
         }, 1800);
       });
     }

@@ -265,6 +265,69 @@ app.get('/download/:id/:filename?', async (c) => {
   }
 });
 
+app.delete('/api/urls/:id', async (c) => {
+  try {
+    const turso = createClient({
+      url: c.env.TURSO_DATABASE_URL,
+      authToken: c.env.TURSO_AUTH_TOKEN,
+    });
+ 
+    const { id } = c.req.param();
+ 
+    const result = await turso.execute({
+      sql: 'DELETE FROM urls WHERE id = ?',
+      args: [id]
+    });
+ 
+    if (result.rowsAffected === 0) {
+      return c.json({ error: 'Not found' }, 404);
+    }
+ 
+    return c.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting URL:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
+// API: List all URLs (newest first, paginated)
+app.get('/api/urls', async (c) => {
+  try {
+    const turso = createClient({
+      url: c.env.TURSO_DATABASE_URL,
+      authToken: c.env.TURSO_AUTH_TOKEN,
+    });
+ 
+    const page = Math.max(1, parseInt(c.req.query('page') || '1'));
+    const limit = Math.min(100, Math.max(1, parseInt(c.req.query('limit') || '50')));
+    const offset = (page - 1) * limit;
+ 
+    const [rows, countResult] = await Promise.all([
+      turso.execute({
+        sql: `SELECT id, original_url, content_type, content_length, filename, created_at
+              FROM urls
+              ORDER BY created_at DESC
+              LIMIT ? OFFSET ?`,
+        args: [limit, offset]
+      }),
+      turso.execute('SELECT COUNT(*) as total FROM urls')
+    ]);
+ 
+    const total = Number(countResult.rows[0]?.total ?? 0);
+ 
+    return c.json({
+      urls: rows.rows,
+      total,
+      page,
+      limit,
+      pages: Math.ceil(total / limit),
+    });
+  } catch (error) {
+    console.error('Error listing URLs:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
 // API: Get link info
 app.get('/api/info/:id', async (c) => {
   try {
