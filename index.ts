@@ -63,8 +63,14 @@ app.post("/api/create", async (c) => {
 
     const { url } = await c.req.json();
 
-    if (!url || !url.startsWith("http")) {
-      return c.json({ error: "Valid URL is required" }, 400);
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return c.json({ error: "Invalid URL" }, 400);
+    }
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      return c.json({ error: "Only http(s) URLs are allowed" }, 400);
     }
 
     // Validate URL length

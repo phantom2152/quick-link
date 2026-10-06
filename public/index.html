@@ -1,178 +1,210 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" class="dark">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23111'/><path d='M18 6L10 18h7l-3 8 12-14h-7l3-8z' fill='%23fafafa'/></svg>">
-  <title>Transload</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          fontFamily: {
-            mono: ['IBM Plex Mono', 'monospace'],
-          }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23111'/><path d='M18 6L10 18h7l-3 8 12-14h-7l3-8z' fill='%23fafafa'/></svg>"
+    />
+    <title>Transload</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            fontFamily: {
+              mono: ["IBM Plex Mono", "monospace"],
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body
+    class="bg-zinc-950 text-zinc-100 font-mono min-h-screen flex items-center justify-center p-5"
+  >
+    <div class="w-full max-w-lg">
+      <!-- Header -->
+      <div class="mb-8">
+        <div class="flex items-center justify-between">
+          <h1 class="text-xl font-medium tracking-tight">Transload</h1>
+          <a
+            href="/urls"
+            class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors underline underline-offset-2"
+          >
+            view all links →
+          </a>
+        </div>
+        <p class="mt-1 text-xs text-zinc-600">
+          Stream any file through Cloudflare's edge servers
+        </p>
+      </div>
+
+      <!-- Input -->
+      <div>
+        <label
+          for="url"
+          class="block text-xs text-zinc-500 mb-2 uppercase tracking-widest"
+          >URL</label
+        >
+        <div class="flex gap-2">
+          <input
+            type="url"
+            id="url"
+            placeholder="https://example.com/file.zip"
+            autocomplete="off"
+            spellcheck="false"
+            class="flex-1 px-3 py-2.5 bg-zinc-900 border border-zinc-800 rounded text-sm text-zinc-100 placeholder-zinc-700 outline-none focus:border-zinc-600 transition-colors"
+          />
+          <button
+            id="submitBtn"
+            onclick="handleSubmit()"
+            class="px-4 py-2.5 bg-zinc-100 text-zinc-900 rounded text-xs font-medium cursor-pointer hover:bg-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed whitespace-nowrap"
+          >
+            Generate
+          </button>
+        </div>
+      </div>
+
+      <!-- Error -->
+      <div id="error" class="mt-3 text-xs text-red-400 hidden"></div>
+
+      <!-- Result -->
+      <div id="result" class="mt-7 hidden">
+        <div
+          id="transloadUrl"
+          class="px-3 py-2.5 bg-zinc-900 border border-zinc-800 rounded text-xs text-zinc-400 break-all leading-relaxed"
+        ></div>
+
+        <div class="flex gap-3 mt-2.5">
+          <button
+            id="copyBtn"
+            onclick="copyUrl()"
+            class="px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded text-xs text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 transition-colors"
+          >
+            copy link
+          </button>
+          <button
+            onclick="openUrl()"
+            class="px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded text-xs text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 transition-colors"
+          >
+            open ↗
+          </button>
+        </div>
+
+        <hr class="border-zinc-800 my-5" />
+
+        <div id="commands" class="flex flex-col gap-2"></div>
+      </div>
+    </div>
+
+    <script>
+      document.getElementById("url").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") handleSubmit();
+      });
+
+      async function handleSubmit() {
+        const url = document.getElementById("url").value.trim();
+        if (!url) return;
+
+        const submitBtn = document.getElementById("submitBtn");
+        const errorBox = document.getElementById("error");
+        const result = document.getElementById("result");
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = "...";
+        errorBox.classList.add("hidden");
+        result.classList.add("hidden");
+
+        try {
+          const response = await fetch("/api/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url }),
+          });
+
+          const data = await response.json();
+          if (!response.ok)
+            throw new Error(data.error || "Failed to create link");
+
+          const fullUrl = window.location.origin + data.download_url;
+          document.getElementById("transloadUrl").textContent = fullUrl;
+
+          const commandsEl = document.getElementById("commands");
+          commandsEl.innerHTML = "";
+
+          [
+            { tool: "wget", cmd: `wget "${fullUrl}"` },
+            { tool: "curl", cmd: `curl -LO "${fullUrl}"` },
+            { tool: "aria2c", cmd: `aria2c "${fullUrl}"` },
+          ].forEach(({ tool, cmd }) => {
+            const row = document.createElement("div");
+            row.className = "flex items-center gap-3 cursor-pointer py-1 group";
+
+            const toolEl = document.createElement("span");
+            toolEl.className = "text-xs text-zinc-600 min-w-[44px]";
+            toolEl.textContent = tool;
+
+            const cmdEl = document.createElement("span");
+            cmdEl.className =
+              "text-xs text-zinc-500 flex-1 truncate group-hover:text-zinc-300 transition-colors";
+            cmdEl.textContent = cmd;
+
+            const check = document.createElement("span");
+            check.className =
+              "text-xs text-emerald-500 opacity-0 transition-opacity";
+            check.textContent = "copied";
+
+            row.append(toolEl, cmdEl, check);
+
+            row.addEventListener("click", () => {
+              navigator.clipboard.writeText(cmd).then(() => {
+                check.classList.remove("opacity-0");
+                check.classList.add("opacity-100");
+                setTimeout(() => {
+                  check.classList.remove("opacity-100");
+                  check.classList.add("opacity-0");
+                }, 1800);
+              });
+            });
+
+            commandsEl.appendChild(row);
+          });
+
+          result.classList.remove("hidden");
+        } catch (err) {
+          errorBox.textContent = err.message;
+          errorBox.classList.remove("hidden");
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Generate";
         }
       }
-    }
-  </script>
-</head>
-<body class="bg-zinc-950 text-zinc-100 font-mono min-h-screen flex items-center justify-center p-5">
-  <div class="w-full max-w-lg">
 
-    <!-- Header -->
-    <div class="mb-8">
-      <div class="flex items-center justify-between">
-        <h1 class="text-xl font-medium tracking-tight">Transload</h1>
-        <a href="/urls" class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors underline underline-offset-2">
-          view all links →
-        </a>
-      </div>
-      <p class="mt-1 text-xs text-zinc-600">Stream any file through Cloudflare's edge servers</p>
-    </div>
-
-    <!-- Input -->
-    <div>
-      <label for="url" class="block text-xs text-zinc-500 mb-2 uppercase tracking-widest">URL</label>
-      <div class="flex gap-2">
-        <input
-          type="url"
-          id="url"
-          placeholder="https://example.com/file.zip"
-          autocomplete="off"
-          spellcheck="false"
-          class="flex-1 px-3 py-2.5 bg-zinc-900 border border-zinc-800 rounded text-sm text-zinc-100 placeholder-zinc-700 outline-none focus:border-zinc-600 transition-colors"
-        />
-        <button
-          id="submitBtn"
-          onclick="handleSubmit()"
-          class="px-4 py-2.5 bg-zinc-100 text-zinc-900 rounded text-xs font-medium cursor-pointer hover:bg-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed whitespace-nowrap"
-        >
-          Generate
-        </button>
-      </div>
-    </div>
-
-    <!-- Error -->
-    <div id="error" class="mt-3 text-xs text-red-400 hidden"></div>
-
-    <!-- Result -->
-    <div id="result" class="mt-7 hidden">
-      <div id="transloadUrl" class="px-3 py-2.5 bg-zinc-900 border border-zinc-800 rounded text-xs text-zinc-400 break-all leading-relaxed"></div>
-
-      <div class="flex gap-3 mt-2.5">
-        <button
-          id="copyBtn"
-          onclick="copyUrl()"
-          class="px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded text-xs text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 transition-colors"
-        >
-          copy link
-        </button>
-        <button
-          onclick="openUrl()"
-          class="px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded text-xs text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 transition-colors"
-        >
-          open ↗
-        </button>
-      </div>
-
-      <hr class="border-zinc-800 my-5" />
-
-      <div id="commands" class="flex flex-col gap-2"></div>
-    </div>
-
-  </div>
-
-  <script>
-    document.getElementById('url').addEventListener('keydown', e => {
-      if (e.key === 'Enter') handleSubmit();
-    });
-
-    async function handleSubmit() {
-      const url = document.getElementById('url').value.trim();
-      if (!url) return;
-
-      const submitBtn = document.getElementById('submitBtn');
-      const errorBox = document.getElementById('error');
-      const result = document.getElementById('result');
-
-      submitBtn.disabled = true;
-      submitBtn.textContent = '...';
-      errorBox.classList.add('hidden');
-      result.classList.add('hidden');
-
-      try {
-        const response = await fetch('/api/create', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url })
+      function copyUrl() {
+        const url = document.getElementById("transloadUrl").textContent;
+        const btn = document.getElementById("copyBtn");
+        navigator.clipboard.writeText(url).then(() => {
+          btn.textContent = "copied";
+          btn.classList.add("text-emerald-500", "border-emerald-800");
+          setTimeout(() => {
+            btn.textContent = "copy link";
+            btn.classList.remove("text-emerald-500", "border-emerald-800");
+          }, 1800);
         });
-
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Failed to create link');
-
-        const fullUrl = window.location.origin + data.download_url;
-        document.getElementById('transloadUrl').textContent = fullUrl;
-
-        const commandsEl = document.getElementById('commands');
-        commandsEl.innerHTML = '';
-
-        [
-          { tool: 'wget',   cmd: `wget "${fullUrl}"` },
-          { tool: 'curl',   cmd: `curl -LO "${fullUrl}"` },
-          { tool: 'aria2c', cmd: `aria2c "${fullUrl}"` },
-        ].forEach(({ tool, cmd }) => {
-          const row = document.createElement('div');
-          row.className = 'flex items-center gap-3 cursor-pointer py-1 group';
-          row.innerHTML = `
-            <span class="text-xs text-zinc-600 min-w-[44px]">${tool}</span>
-            <span class="text-xs text-zinc-500 flex-1 truncate group-hover:text-zinc-300 transition-colors">${cmd}</span>
-            <span id="check-${tool}" class="text-xs text-emerald-500 opacity-0 transition-opacity">copied</span>
-          `;
-          row.addEventListener('click', () => {
-            navigator.clipboard.writeText(cmd).then(() => {
-              const check = document.getElementById(`check-${tool}`);
-              check.classList.remove('opacity-0');
-              check.classList.add('opacity-100');
-              setTimeout(() => {
-                check.classList.remove('opacity-100');
-                check.classList.add('opacity-0');
-              }, 1800);
-            });
-          });
-          commandsEl.appendChild(row);
-        });
-
-        result.classList.remove('hidden');
-      } catch (err) {
-        errorBox.textContent = err.message;
-        errorBox.classList.remove('hidden');
-      } finally {
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Generate';
       }
-    }
 
-    function copyUrl() {
-      const url = document.getElementById('transloadUrl').textContent;
-      const btn = document.getElementById('copyBtn');
-      navigator.clipboard.writeText(url).then(() => {
-        btn.textContent = 'copied';
-        btn.classList.add('text-emerald-500', 'border-emerald-800');
-        setTimeout(() => {
-          btn.textContent = 'copy link';
-          btn.classList.remove('text-emerald-500', 'border-emerald-800');
-        }, 1800);
-      });
-    }
-
-    function openUrl() {
-      const url = document.getElementById('transloadUrl').textContent;
-      if (url) window.open(url, '_blank');
-    }
-  </script>
-</body>
+      function openUrl() {
+        const url = document.getElementById("transloadUrl").textContent;
+        if (url) window.open(url, "_blank");
+      }
+    </script>
+  </body>
 </html>
