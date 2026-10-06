@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { createClient } from "@libsql/client";
+import { createClient, type Client, type Row } from "@libsql/client";
 import { nanoid } from "nanoid";
 import type { HeadersInit } from "bun";
 
@@ -39,6 +39,38 @@ async function initDB(url: string, authToken: string) {
 //   });
 // })
 
+async function findByUrl(db: Client, url: string) {
+  const res = await db.execute({
+    sql: "SELECT * FROM urls WHERE original_url = ?",
+    args: [url],
+  });
+  return res.rows[0] ?? null;
+}
+
+function toResponse(r: Row, isExisting: boolean) {
+  const filename = (r.filename as string) || "download.bin";
+  return {
+    success: true,
+    id: r.id,
+    download_url: `/download/${r.id}/${encodeURIComponent(filename)}`,
+    ...(isExisting && { is_existing: true }),
+    metadata: {
+      content_type: r.content_type,
+      content_length: r.content_length,
+      filename,
+    },
+  };
+}
+
+function filenameFromUrl(u: string) {
+  try {
+    const seg = new URL(u).pathname.split("/").pop() || "";
+    return decodeURIComponent(seg);
+  } catch {
+    return "";
+  }
+}
+
 let dbReady: Promise<unknown> | null = null;
 
 app.use("*", async (c, next) => {
@@ -55,13 +87,16 @@ app.use("*", async (c, next) => {
 // API: Create transload link
 app.post("/api/create", async (c) => {
   try {
-    // Get environment variables from context
     const turso = createClient({
       url: c.env.TURSO_DATABASE_URL,
       authToken: c.env.TURSO_AUTH_TOKEN,
     });
 
-    const { url } = await c.req.json();
+    const body = await c.req.json().catch(() => null);
+    const url = typeof body?.url === "string" ? body.url.trim() : "";
+
+    if (!url) return c.json({ error: "URL is required" }, 400);
+    if (url.length > 2048) return c.json({ error: "URL too long" }, 400);
 
     let parsed: URL;
     try {
@@ -73,137 +108,73 @@ app.post("/api/create", async (c) => {
       return c.json({ error: "Only http(s) URLs are allowed" }, 400);
     }
 
-    // Validate URL length
-    if (url.length > 2048) {
-      return c.json({ error: "URL too long" }, 400);
-    }
+    // Dedupe
+    const existing = await findByUrl(turso, url);
+    if (existing) return c.json(toResponse(existing, true));
 
-    // 1. Check for duplicates (Deduplication)
-    const existing = await turso.execute({
-      sql: "SELECT * FROM urls WHERE original_url = ?",
-      args: [url],
-    });
-
-    if (existing.rows.length > 0) {
-      const record = existing.rows[0];
-      if (record) {
-        const filename = record.filename as string;
-        const safeFilename = encodeURIComponent(filename);
-
-        return c.json({
-          success: true,
-          id: record.id,
-          download_url: `/download/${record.id}/${safeFilename}`,
-          is_existing: true,
-          metadata: {
-            content_type: record.content_type,
-            content_length: record.content_length,
-            filename: filename,
-          },
-        });
-      }
-    }
-
-    // --- New URL Logic with GET request ---
-    let contentType = "application/octet-stream";
-    let contentLength = "";
-    let filename = "";
-    let metadataFetched = false;
-
+    // Fetch headers only
+    let response: Response;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-      const response = await fetch(url, {
+      response = await fetch(url, {
         method: "GET",
         signal: controller.signal,
         redirect: "follow",
       });
-
+    } catch {
+      return c.json({ error: "Could not reach that URL" }, 502);
+    } finally {
       clearTimeout(timeoutId);
-
-      // Extract metadata from response headers
-      contentType = response.headers.get("content-type") || contentType;
-      contentLength = response.headers.get("content-length") || "";
-
-      const disposition = response.headers.get("content-disposition");
-      if (disposition) {
-        const star = disposition.match(/filename\*\s*=\s*[^']*'[^']*'([^;]+)/i);
-        const plain = disposition.match(/filename\s*=\s*("([^"]*)"|[^;]+)/i);
-        try {
-          if (star?.[1]) filename = decodeURIComponent(star[1].trim());
-          else if (plain) {
-            const plainFilename = plain[2] ?? plain[1];
-            if (plainFilename) filename = plainFilename.trim();
-          }
-        } catch {
-          /* malformed encoding, fall through to URL-based name */
-        }
-      }
-
-      // If no filename from content-disposition, extract from final URL (after redirects)
-      if (!filename) {
-        const finalUrl = response.url;
-        const urlPath = new URL(finalUrl).pathname;
-        // Remove query parameters and get the last segment
-        const pathSegment = urlPath.split("/").pop() || "";
-        const decodedSegment = pathSegment.split("?")[0] || "";
-        filename = decodeURIComponent(decodedSegment) || "download";
-      }
-
-      metadataFetched = true;
-
-      // Abort the request to stop downloading the body
-      controller.abort();
-    } catch (e) {
-      // Ignore AbortError since we abort intentionally after getting headers
-      if (e instanceof Error && e.name !== "AbortError") {
-        console.error("Failed to fetch metadata:", e);
-      }
-
-      // Fallback filename if metadata fetch completely fails
-      if (!filename) {
-        try {
-          const urlPath = new URL(url).pathname;
-          const pathSegment = urlPath.split("/").pop() || "";
-          const decodedSegment = pathSegment.split("?")[0] || "";
-          filename = decodeURIComponent(decodedSegment) || "download.bin";
-        } catch {
-          filename = "download.bin";
-        }
-      }
     }
 
-    // Sanitize filename: remove invalid characters
-    filename =
-      filename.replace(/[<>:"/\\|?*\x00-\x1F]/g, "_").trim() || "download.bin";
+    const status = response.status;
+    const contentType =
+      response.headers.get("content-type") || "application/octet-stream";
+    const contentLength = response.headers.get("content-length") || "";
+    const disposition = response.headers.get("content-disposition");
+    const finalUrl = response.url || url;
 
-    // Ensure filename isn't empty after sanitization
-    if (!filename || filename === "_") {
-      filename = "download.bin";
+    // We only wanted headers; stop the body from downloading
+    await response.body?.cancel().catch(() => {});
+
+    if (status < 200 || status >= 300) {
+      return c.json({ error: `That URL returned HTTP ${status}` }, 400);
     }
 
+    // Filename: prefer filename*=, then filename=, then the URL path
+    let filename = "";
+    if (disposition) {
+      const star = disposition.match(/filename\*\s*=\s*[^']*'[^']*'([^;]+)/i);
+      const plain = disposition.match(/filename\s*=\s*("([^"]*)"|[^;]+)/i);
+      try {
+        if (star?.[1]) filename = decodeURIComponent(star[1].trim());
+        else if (plain) filename = (plain[2] ?? plain[1] ?? "").trim();
+      } catch {
+        /* malformed encoding, fall through */
+      }
+    }
+    if (!filename) filename = filenameFromUrl(finalUrl) || filenameFromUrl(url);
+
+    filename = filename
+      .replace(/[<>:"/\\|?*\x00-\x1F]/g, "_")
+      .trim()
+      .slice(0, 200);
+    if (!filename || filename === "_") filename = "download.bin";
+
+    // Insert; if a concurrent request won the race, ON CONFLICT skips ours
     const id = nanoid(10);
-
-    // Store the ORIGINAL URL, not the final redirected URL
     await turso.execute({
-      sql: `INSERT INTO urls (id, original_url, content_type, content_length, filename) 
-            VALUES (?, ?, ?, ?, ?)`,
+      sql: `INSERT INTO urls (id, original_url, content_type, content_length, filename)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(original_url) DO NOTHING`,
       args: [id, url, contentType, contentLength, filename],
     });
 
-    const safeFilename = encodeURIComponent(filename);
+    const row = await findByUrl(turso, url);
+    if (!row) return c.json({ error: "Internal server error" }, 500);
 
-    return c.json({
-      success: true,
-      id,
-      download_url: `/download/${id}/${safeFilename}`,
-      metadata: {
-        content_type: contentType,
-        content_length: contentLength,
-        filename,
-      },
-    });
+    return c.json(toResponse(row, row.id !== id));
   } catch (error) {
     console.error("Error creating transload:", error);
     return c.json({ error: "Internal server error" }, 500);
