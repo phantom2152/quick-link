@@ -232,53 +232,52 @@ app.get("/download/:id/:filename?", async (c) => {
     // Get Range header from incoming request
     const rangeHeader = c.req.header("range");
 
-    const fetchHeaders: HeadersInit = {};
-    if (rangeHeader) {
-      fetchHeaders["Range"] = rangeHeader;
+    const fetchHeaders = new Headers();
+    if (rangeHeader) fetchHeaders.set("Range", rangeHeader);
+
+    const fileResponse = await fetch(originalUrl, { headers: fetchHeaders });
+
+    // Pass 416 through so clients know the file is already complete
+    if (fileResponse.status === 416) {
+      const h = new Headers();
+      const cr = fileResponse.headers.get("content-range");
+      if (cr) h.set("Content-Range", cr);
+      return new Response(null, { status: 416, headers: h });
     }
 
-    const fileResponse = await fetch(originalUrl, {
-      headers: fetchHeaders,
-    });
-
-    if (!fileResponse.ok && fileResponse.status !== 206) {
+    if (!fileResponse.ok) {
       return c.text("Failed to fetch original file", 502);
     }
 
-    const upstreamLength = fileResponse.headers.get("content-length");
-    const dbLength = record.content_length as string;
-    const finalLength = upstreamLength || dbLength;
-
-    const headers: Record<string, string> = {
+    const headers = new Headers({
       "Content-Type":
         fileResponse.headers.get("content-type") ||
         (record.content_type as string),
       "Access-Control-Allow-Origin": "*",
-      "Accept-Ranges": "bytes",
-    };
+    });
 
-    if (finalLength) {
-      headers["Content-Length"] = finalLength;
+    // Only pass through what upstream actually said. No DB fallback.
+    for (const name of [
+      "content-length",
+      "content-range",
+      "accept-ranges",
+      "etag",
+      "last-modified",
+    ]) {
+      const v = fileResponse.headers.get(name);
+      if (v) headers.set(name, v);
     }
 
     if (dbFilename) {
-      headers["Content-Disposition"] = `attachment; filename="${dbFilename}"`;
+      const ascii = dbFilename.replace(/[^\x20-\x7E]/g, "_").replace(/"/g, "");
+      headers.set(
+        "Content-Disposition",
+        `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(dbFilename)}`,
+      );
     }
-
-    // Pass through range-related headers
-    const contentRange = fileResponse.headers.get("content-range");
-    if (contentRange) {
-      headers["Content-Range"] = contentRange;
-    }
-
-    const etag = fileResponse.headers.get("etag");
-    if (etag) headers["ETag"] = etag;
-
-    const lastModified = fileResponse.headers.get("last-modified");
-    if (lastModified) headers["Last-Modified"] = lastModified;
 
     return new Response(fileResponse.body, {
-      status: fileResponse.status, // 200 or 206 for partial content
+      status: fileResponse.status,
       headers,
     });
   } catch (error) {
