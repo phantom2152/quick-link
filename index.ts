@@ -122,11 +122,16 @@ app.post("/api/create", async (c) => {
 
       const disposition = response.headers.get("content-disposition");
       if (disposition) {
-        const filenameMatch = disposition.match(
-          /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/,
-        );
-        if (filenameMatch && filenameMatch[1]) {
-          filename = filenameMatch[1].replace(/['"]/g, "");
+        const star = disposition.match(/filename\*\s*=\s*[^']*'[^']*'([^;]+)/i);
+        const plain = disposition.match(/filename\s*=\s*("([^"]*)"|[^;]+)/i);
+        try {
+          if (star?.[1]) filename = decodeURIComponent(star[1].trim());
+          else if (plain) {
+            const plainFilename = plain[2] ?? plain[1];
+            if (plainFilename) filename = plainFilename.trim();
+          }
+        } catch {
+          /* malformed encoding, fall through to URL-based name */
         }
       }
 
