@@ -14,6 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
+    <script src="auth.js"></script>
     <script>
       tailwind.config = {
         darkMode: "class",
@@ -40,12 +41,21 @@
           <h1 class="text-xl font-medium tracking-tight mt-2">All Links</h1>
           <p class="mt-1 text-xs text-zinc-600">Every transload URL created</p>
         </div>
-        <a
-          href="/"
-          class="px-3 py-2 bg-zinc-100 text-zinc-900 rounded text-xs font-medium hover:bg-white transition-colors"
-        >
-          + New
-        </a>
+        <div class="flex items-center gap-2">
+          <button
+            id="logoutBtn"
+            onclick="logout()"
+            class="hidden px-3 py-2 border border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600 rounded text-xs transition-colors"
+          >
+            log out
+          </button>
+          <a
+            href="/"
+            class="px-3 py-2 bg-zinc-100 text-zinc-900 rounded text-xs font-medium hover:bg-white transition-colors"
+          >
+            + New
+          </a>
+        </div>
       </div>
 
       <!-- Loading -->
@@ -230,7 +240,7 @@
         triggerBtn.disabled = true;
 
         try {
-          const res = await fetch("/api/urls/delete", {
+          const res = await api("/api/urls/delete", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ ids }),
@@ -381,9 +391,10 @@
         const tableWrap = document.getElementById("tableWrap");
 
         try {
-          const res = await fetch("/api/urls");
+          const res = await api("/api/urls");
           const data = await res.json();
           if (!res.ok) throw new Error(data.error || "Failed to load");
+          document.getElementById("logoutBtn").classList.remove("hidden");
 
           loading.classList.add("hidden");
 

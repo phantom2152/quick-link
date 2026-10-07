@@ -14,6 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
+    <script src="auth.js"></script>
     <script>
       tailwind.config = {
         darkMode: "class",
@@ -124,7 +125,7 @@
         result.classList.add("hidden");
 
         try {
-          const response = await fetch("/api/create", {
+          const response = await api("/api/create", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ url }),

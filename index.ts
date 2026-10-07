@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { createClient, type Client, type Row } from "@libsql/client";
 import { nanoid } from "nanoid";
 import type { HeadersInit } from "bun";
@@ -7,11 +8,62 @@ import type { HeadersInit } from "bun";
 type Bindings = {
   TURSO_DATABASE_URL: string;
   TURSO_AUTH_TOKEN: string;
+  APP_PASSWORD: string;
+  AUTH_SECRET: string;
 };
 
-const app = new Hono<{ Bindings: Bindings }>();
+const COOKIE_NAME = "tl_session";
+const SESSION_SECONDS = 60 * 60 * 24 * 30; // 30 days
+const enc = new TextEncoder();
 
-// Initialize database schema
+function b64url(buf: ArrayBuffer) {
+  let s = "";
+  for (const b of new Uint8Array(buf)) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function hmac(secret: string, data: string) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  return crypto.subtle.sign("HMAC", key, enc.encode(data));
+}
+
+async function safeEqual(a: string, b: string) {
+  const [ha, hb] = await Promise.all([
+    crypto.subtle.digest("SHA-256", enc.encode(a)),
+    crypto.subtle.digest("SHA-256", enc.encode(b)),
+  ]);
+  const x = new Uint8Array(ha);
+  const y = new Uint8Array(hb);
+  let diff = 0;
+  for (let i = 0; i < x.length; i++) diff |= x[i]! ^ y[i]!;
+  return diff === 0;
+}
+
+async function makeToken(secret: string) {
+  const exp = Math.floor(Date.now() / 1000) + SESSION_SECONDS;
+  const sig = b64url(await hmac(secret, String(exp)));
+  return `${exp}.${sig}`;
+}
+
+async function verifyToken(secret: string, token: string | undefined) {
+  if (!token) return false;
+  const [expStr, sig] = token.split(".");
+  if (!expStr || !sig) return false;
+
+  const exp = Number(expStr);
+  if (!Number.isInteger(exp) || exp < Math.floor(Date.now() / 1000))
+    return false;
+
+  const expected = b64url(await hmac(secret, expStr));
+  return safeEqual(sig, expected);
+}
+
 async function initDB(url: string, authToken: string) {
   const turso = createClient({
     url,
@@ -30,14 +82,6 @@ async function initDB(url: string, authToken: string) {
   `);
   console.log("calling turso");
 }
-
-// // HTML page
-// app.get('/', async (c) => {
-//   const file = Bun.file('./index.html');
-//   return new Response(file.stream(), {
-//     headers: { 'Content-Type': 'text/html' }
-//   });
-// })
 
 async function findByUrl(db: Client, url: string) {
   const res = await db.execute({
@@ -70,6 +114,65 @@ function filenameFromUrl(u: string) {
     return "";
   }
 }
+
+const app = new Hono<{ Bindings: Bindings }>();
+
+// Initialize database schema
+
+// // HTML page
+// app.get('/', async (c) => {
+//   const file = Bun.file('./index.html');
+//   return new Response(file.stream(), {
+//     headers: { 'Content-Type': 'text/html' }
+//   });
+// })
+
+app.use("/api/*", async (c, next) => {
+  if (c.req.path === "/api/login" || c.req.path === "/api/logout")
+    return next();
+
+  if (!c.env.AUTH_SECRET || !c.env.APP_PASSWORD) {
+    console.error("AUTH_SECRET / APP_PASSWORD not set");
+    return c.json({ error: "Server auth is not configured" }, 500);
+  }
+
+  const ok = await verifyToken(c.env.AUTH_SECRET, getCookie(c, COOKIE_NAME));
+  if (!ok) return c.json({ error: "Unauthorized" }, 401);
+
+  return next();
+});
+
+app.post("/api/login", async (c) => {
+  if (!c.env.AUTH_SECRET || !c.env.APP_PASSWORD) {
+    console.error("AUTH_SECRET / APP_PASSWORD not set");
+    return c.json({ error: "Server auth is not configured" }, 500);
+  }
+
+  const body = await c.req.json().catch(() => null);
+  const password = typeof body?.password === "string" ? body.password : "";
+
+  if (
+    password.length > 512 ||
+    !(await safeEqual(password, c.env.APP_PASSWORD))
+  ) {
+    return c.json<{ error: string }>({ error: "Wrong password" }, 401);
+  }
+
+  const token = await makeToken(c.env.AUTH_SECRET);
+  setCookie(c, COOKIE_NAME, token, {
+    httpOnly: true,
+    sameSite: "Strict",
+    path: "/",
+    maxAge: SESSION_SECONDS,
+    secure: new URL(c.req.url).protocol === "https:", // off on http://localhost so Safari keeps it
+  });
+  return c.json({ success: true });
+});
+
+app.post("/api/logout", (c) => {
+  deleteCookie(c, COOKIE_NAME, { path: "/" });
+  return c.json({ success: true });
+});
 
 let dbReady: Promise<unknown> | null = null;
 
