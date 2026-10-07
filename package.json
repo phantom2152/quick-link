@@ -5,10 +5,14 @@
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "css": "tailwindcss -i ./src/input.css -o ./public/tailwind.css --minify",
+    "css:watch": "tailwindcss -i ./src/input.css -o ./public/tailwind.css --watch"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@tailwindcss/cli": "^4.3.3",
+    "@types/bun": "latest",
+    "tailwindcss": "^4.3.3"
   },
   "peerDependencies": {
     "typescript": "^5"
