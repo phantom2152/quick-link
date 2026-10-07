@@ -263,27 +263,32 @@ app.get("/download/:id/:filename?", async (c) => {
   }
 });
 
-app.delete("/api/urls/:id", async (c) => {
+app.post("/api/urls/delete", async (c) => {
   try {
+    const body = await c.req.json().catch(() => null);
+    const ids: unknown[] = Array.isArray(body?.ids)
+      ? [...new Set(body.ids)]
+      : [];
+
+    const valid =
+      ids.length >= 1 &&
+      ids.length <= 100 &&
+      ids.every((x) => typeof x === "string" && x.length > 0 && x.length <= 64);
+    if (!valid) return c.json({ error: "ids must be 1-100 strings" }, 400);
+
     const turso = createClient({
       url: c.env.TURSO_DATABASE_URL,
       authToken: c.env.TURSO_AUTH_TOKEN,
     });
 
-    const { id } = c.req.param();
-
     const result = await turso.execute({
-      sql: "DELETE FROM urls WHERE id = ?",
-      args: [id],
+      sql: `DELETE FROM urls WHERE id IN (${ids.map(() => "?").join(",")})`,
+      args: ids as string[],
     });
 
-    if (result.rowsAffected === 0) {
-      return c.json({ error: "Not found" }, 404);
-    }
-
-    return c.json({ success: true });
+    return c.json({ success: true, deleted: result.rowsAffected });
   } catch (error) {
-    console.error("Error deleting URL:", error);
+    console.error("Error deleting URLs:", error);
     return c.json({ error: "Internal server error" }, 500);
   }
 });

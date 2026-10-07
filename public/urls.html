@@ -66,11 +66,36 @@
 
       <!-- Table -->
       <div id="tableWrap" class="hidden">
-        <div class="text-xs text-zinc-600 mb-3" id="countLabel"></div>
+        <div class="flex items-center justify-between mb-3 h-7">
+          <div class="text-xs text-zinc-600" id="countLabel"></div>
+          <div id="bulkBar" class="hidden items-center gap-2">
+            <span id="selectedLabel" class="text-xs text-zinc-400"></span>
+            <button
+              id="clearBtn"
+              class="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors px-2 py-1 border border-zinc-800 rounded hover:border-zinc-600"
+            >
+              clear
+            </button>
+            <button
+              id="bulkDeleteBtn"
+              class="text-[10px] text-red-400 hover:text-red-300 transition-colors px-2 py-1 border border-red-900 rounded hover:border-red-700"
+            >
+              delete selected
+            </button>
+          </div>
+        </div>
         <div class="border border-zinc-800 rounded overflow-hidden">
           <table class="w-full text-xs">
             <thead>
               <tr class="border-b border-zinc-800 bg-zinc-900">
+                <th class="pl-4 py-3 w-8">
+                  <input
+                    type="checkbox"
+                    id="selectAll"
+                    class="accent-zinc-300 cursor-pointer"
+                    aria-label="Select all"
+                  />
+                </th>
                 <th
                   class="text-left px-4 py-3 text-zinc-500 font-medium uppercase tracking-widest text-[10px]"
                 >
@@ -152,6 +177,97 @@
       const actionBtnCls =
         "text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors px-2 py-1 border border-zinc-800 rounded hover:border-zinc-600";
 
+      const selected = new Set();
+      let total = 0;
+
+      function refreshCount() {
+        document.getElementById("countLabel").textContent =
+          `${total} link${total !== 1 ? "s" : ""}`;
+        if (total <= 0) {
+          document.getElementById("tableWrap").classList.add("hidden");
+          document.getElementById("empty").classList.remove("hidden");
+        }
+      }
+
+      function updateSelectionUI() {
+        const n = selected.size;
+        const bar = document.getElementById("bulkBar");
+        bar.classList.toggle("hidden", n === 0);
+        bar.classList.toggle("flex", n > 0);
+        document.getElementById("selectedLabel").textContent = `${n} selected`;
+
+        const boxes = document.querySelectorAll(
+          "#tableBody input[type=checkbox]",
+        );
+        const all = document.getElementById("selectAll");
+        all.checked = boxes.length > 0 && n === boxes.length;
+        all.indeterminate = n > 0 && n < boxes.length;
+      }
+
+      function setAll(checked) {
+        document.querySelectorAll("#tableBody tr").forEach((tr) => {
+          tr.querySelector("input[type=checkbox]").checked = checked;
+          tr.classList.toggle("bg-zinc-900/60", checked);
+          if (checked) selected.add(tr.dataset.id);
+          else selected.delete(tr.dataset.id);
+        });
+        updateSelectionUI();
+      }
+
+      async function deleteIds(ids, triggerBtn) {
+        if (!ids.length) return;
+        if (
+          !confirm(
+            ids.length === 1
+              ? "Delete this link?"
+              : `Delete ${ids.length} links?`,
+          )
+        )
+          return;
+
+        const original = triggerBtn.textContent;
+        triggerBtn.textContent = "...";
+        triggerBtn.disabled = true;
+
+        try {
+          const res = await fetch("/api/urls/delete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ids }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || "Failed to delete");
+
+          const gone = new Set(ids);
+          document.querySelectorAll("#tableBody tr").forEach((tr) => {
+            if (gone.has(tr.dataset.id)) tr.remove();
+          });
+          ids.forEach((id) => selected.delete(id));
+          total -= data.deleted ?? ids.length;
+          refreshCount();
+          updateSelectionUI();
+        } catch (err) {
+          const error = document.getElementById("error");
+          error.textContent = err.message;
+          error.classList.remove("hidden");
+        } finally {
+          triggerBtn.textContent = original;
+          triggerBtn.disabled = false;
+        }
+      }
+
+      document
+        .getElementById("selectAll")
+        .addEventListener("change", (e) => setAll(e.target.checked));
+      document
+        .getElementById("clearBtn")
+        .addEventListener("click", () => setAll(false));
+      document
+        .getElementById("bulkDeleteBtn")
+        .addEventListener("click", (e) =>
+          deleteIds([...selected], e.currentTarget),
+        );
+
       function buildRow(row) {
         const filename = row.filename || "download.bin";
         const downloadUrl = `${window.location.origin}/download/${encodeURIComponent(row.id)}/${encodeURIComponent(filename)}`;
@@ -159,6 +275,21 @@
         const tr = el("tr", {
           cls: "hover:bg-zinc-900/60 transition-colors group",
         });
+
+        tr.dataset.id = row.id;
+
+        const tdCheck = el("td", { cls: "pl-4 py-3 w-8" });
+        const cb = el("input", {
+          cls: "accent-zinc-300 cursor-pointer",
+          attrs: { type: "checkbox", "aria-label": `Select ${filename}` },
+        });
+        cb.addEventListener("change", () => {
+          if (cb.checked) selected.add(row.id);
+          else selected.delete(row.id);
+          tr.classList.toggle("bg-zinc-900/60", cb.checked);
+          updateSelectionUI();
+        });
+        tdCheck.append(cb);
 
         // Filename
         const tdName = el("td", {
@@ -234,12 +365,12 @@
           text: "✕",
           attrs: { "aria-label": "Delete link" },
         });
-        delBtn.addEventListener("click", () => deleteLink(row.id, delBtn, tr));
+        delBtn.addEventListener("click", () => deleteIds([row.id], delBtn));
 
         actions.append(copyBtn, dlLink, delBtn);
         tdActions.append(actions);
 
-        tr.append(tdName, tdUrl, tdSize, tdDate, tdActions);
+        tr.append(tdCheck, tdName, tdUrl, tdSize, tdDate, tdActions);
         return tr;
       }
 
@@ -261,8 +392,8 @@
             return;
           }
 
-          document.getElementById("countLabel").textContent =
-            `${data.total} link${data.total !== 1 ? "s" : ""}`;
+          total = data.total;
+          refreshCount();
 
           const tbody = document.getElementById("tableBody");
           data.urls.forEach((row) => tbody.appendChild(buildRow(row)));
@@ -272,36 +403,6 @@
           loading.classList.add("hidden");
           error.textContent = err.message;
           error.classList.remove("hidden");
-        }
-      }
-
-      async function deleteLink(id, btn, tr) {
-        if (!confirm("Delete this link?")) return;
-
-        btn.textContent = "...";
-        btn.disabled = true;
-
-        try {
-          const res = await fetch(`/api/urls/${encodeURIComponent(id)}`, {
-            method: "DELETE",
-          });
-          if (!res.ok) throw new Error("Failed to delete");
-
-          tr.style.transition = "opacity 0.2s";
-          tr.style.opacity = "0";
-          setTimeout(() => {
-            tr.remove();
-            const remaining = document.querySelectorAll("#tableBody tr").length;
-            document.getElementById("countLabel").textContent =
-              `${remaining} link${remaining !== 1 ? "s" : ""}`;
-            if (remaining === 0) {
-              document.getElementById("tableWrap").classList.add("hidden");
-              document.getElementById("empty").classList.remove("hidden");
-            }
-          }, 200);
-        } catch (err) {
-          btn.textContent = "✕";
-          btn.disabled = false;
         }
       }
 
