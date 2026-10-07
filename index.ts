@@ -10,6 +10,9 @@ type Bindings = {
   TURSO_AUTH_TOKEN: string;
   APP_PASSWORD: string;
   AUTH_SECRET: string;
+  LOGIN_LIMITER: {
+    limit(opts: { key: string }): Promise<{ success: boolean }>;
+  };
 };
 
 const COOKIE_NAME = "tl_session";
@@ -143,6 +146,11 @@ app.use("/api/*", async (c, next) => {
 });
 
 app.post("/api/login", async (c) => {
+  const ip = c.req.header("cf-connecting-ip") ?? "unknown";
+  const { success } = await c.env.LOGIN_LIMITER.limit({ key: ip });
+  if (!success) {
+    return c.json({ error: "Too many attempts, try again in a minute" }, 429);
+  }
   if (!c.env.AUTH_SECRET || !c.env.APP_PASSWORD) {
     console.error("AUTH_SECRET / APP_PASSWORD not set");
     return c.json({ error: "Server auth is not configured" }, 500);

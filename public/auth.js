@@ -62,7 +62,10 @@
                         body: JSON.stringify({ password: input.value }),
                     });
                     if (res.ok) return finish(true);
-                    err.textContent = res.status === 401 ? 'Wrong password' : 'Login failed';
+                    err.textContent =
+                        res.status === 401 ? 'Wrong password' :
+                            res.status === 429 ? 'Too many attempts, wait a minute' :
+                                'Login failed';
                     input.value = '';
                     input.focus();
                 } catch {

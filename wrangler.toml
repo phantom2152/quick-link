@@ -7,3 +7,11 @@ assets = { directory = "public" }
 
 [observability]
 enabled = true
+
+[[ratelimits]]
+name = "LOGIN_LIMITER"
+namespace_id = "1001"
+
+[ratelimits.simple]
+limit = 5
+period = 60
